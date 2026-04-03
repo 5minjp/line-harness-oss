@@ -15,7 +15,7 @@ binding = "ASSETS"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "line-harness"
+# database_name = "line-harness"
 # database_id = "YOUR_DEV_D1_DATABASE_ID"
 
 [[r2_buckets]]
