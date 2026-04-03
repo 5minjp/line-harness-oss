@@ -31,7 +31,7 @@ crons = ["*/5 * * * *"]
 # D1:     npx wrangler d1 execute line-crm --env production --remote --file ...
 # ═══════════════════════════════════════════════════════════════
 [env.production]
-account_id = "YOUR_ACCOUNT_ID"
+account_id = "0d14cbe4a12fe43ff9aeea0a79b234b2"
 
 [env.production.assets]
 directory = "dist/client"
@@ -40,7 +40,7 @@ binding = "ASSETS"
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "line-crm"
-database_id = "YOUR_D1_DATABASE_ID"
+database_id = "dc145980-0450-4eb5-8abf-924c1972cf60"
 
 [[env.production.r2_buckets]]
 binding = "IMAGES"
