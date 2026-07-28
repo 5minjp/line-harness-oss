@@ -329,6 +329,14 @@ app.get('/r/:ref', async (c) => {
   if (page && PAGE_PASSTHROUGH_ALLOWED.has(page)) liffParams.set('page', page);
   const id = c.req.query('id');
   if (id) liffParams.set('id', id);
+  // Ad click IDs + UTM passthrough. /auth/line forwards its full query string
+  // to /r/:ref, but rebuilding liffParams here without these keys silently
+  // drops ad attribution for the primary mobile path. Keep this list in sync
+  // with the params /auth/line reads.
+  for (const key of ['gclid', 'fbclid', 'twclid', 'ttclid', 'utm_source', 'utm_medium', 'utm_campaign']) {
+    const value = c.req.query(key);
+    if (value) liffParams.set(key, value);
+  }
   const liffTarget = liffParams.toString() ? `${liffUrl}?${liffParams.toString()}` : liffUrl;
 
   // Help link carries the *resolved* liff target as `t=` so the help page
