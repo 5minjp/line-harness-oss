@@ -200,6 +200,23 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
   const stateRef = useRef<WebinarState | null>(null);
   stateRef.current = state;
 
+  const trackFunnelEvent = useCallback((
+    eventType: 'cta_impression' | 'form_open' | 'form_start' | 'field_complete' |
+      'submit_attempt' | 'submit_success' | 'submit_error',
+    card: WebinarCtaCard,
+    fieldName = '',
+  ) => {
+    const current = stateRef.current;
+    if (IS_PREVIEW || !current?.live || current.sessionStartAt === null) return;
+    void apiPost(`/api/liff/webinars/${encodeURIComponent(slug)}/funnel-event`, {
+      sessionStartAt: current.sessionStartAt,
+      eventType,
+      ctaId: card.id,
+      formId: card.formId,
+      fieldName,
+    }, ctx).catch(() => undefined);
+  }, [slug, ctx]);
+
   const expectedPosition = useCallback(
     () => baseOffsetRef.current + (performance.now() - t0Ref.current) / 1000,
     [],
@@ -408,6 +425,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
       const cards = src.ctas ?? [];
       while (ctaIdxRef.current < cards.length && cards[ctaIdxRef.current].atSeconds <= pos) {
         const card = cards[ctaIdxRef.current];
+        trackFunnelEvent('cta_impression', card);
         items.push({
           key: `c-${card.id}`,
           authorName: '',
@@ -424,7 +442,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
       if (cards.length === 0 && src.cta && pos >= src.cta.showAtSeconds) setCtaVisible(true);
     }, 1000);
     return () => clearInterval(timer);
-  }, [state, joined, expectedPosition]);
+  }, [state, joined, expectedPosition, trackFunnelEvent]);
 
   // 待機ルーム: 開始前サクラコメント (負の atSeconds) の流し込み (1秒 tick)
   useEffect(() => {
@@ -519,6 +537,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
     if (!IS_PREVIEW) {
       void apiPost(`/api/liff/webinars/${encodeURIComponent(slug)}/cta-click`, {
         sessionStartAt: state.sessionStartAt,
+        ctaId: card.id,
       }, ctx).catch(() => undefined);
     }
     if (card.kind === 'url' && card.url) {
@@ -530,6 +549,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
       return;
     }
     if (card.kind === 'form' && card.formId) {
+      trackFunnelEvent('form_open', card);
       setFormSheet({ cta: card, phase: 'loading' });
       // 開封記録 (フォーム機能側のファネル計測に乗せる)
       if (!IS_PREVIEW) {
@@ -932,6 +952,8 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
         <FormSheet
           sheet={formSheet}
           ctx={ctx}
+          onFunnelEvent={(eventType, fieldName) =>
+            trackFunnelEvent(eventType, formSheet.cta, fieldName)}
           onClose={() => setFormSheet(null)}
           onSubmitted={(def) => setFormSheet({ cta: formSheet.cta, phase: 'done', def })}
         />
@@ -949,6 +971,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
 function FormSheet({
   sheet,
   ctx,
+  onFunnelEvent,
   onClose,
   onSubmitted,
 }: {
@@ -958,23 +981,44 @@ function FormSheet({
     | { cta: WebinarCtaCard; phase: 'done'; def: FormDef }
     | { cta: WebinarCtaCard; phase: 'error'; message: string };
   ctx: WebinarContext;
+  onFunnelEvent: (
+    eventType: 'form_start' | 'field_complete' | 'submit_attempt' |
+      'submit_success' | 'submit_error',
+    fieldName?: string,
+  ) => void;
   onClose: () => void;
   onSubmitted: (def: FormDef) => void;
 }) {
   const [values, setValues] = useState<Record<string, string | string[]>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const startedRef = useRef(false);
+  const completedFieldsRef = useRef(new Set<string>());
 
-  const setValue = (name: string, v: string | string[]) =>
+  const setValue = (name: string, v: string | string[]) => {
+    if (!startedRef.current) {
+      startedRef.current = true;
+      onFunnelEvent('form_start');
+    }
     setValues((prev) => ({ ...prev, [name]: v }));
+  };
+
+  const markFieldComplete = (name: string, value: string | string[]) => {
+    const hasValue = Array.isArray(value) ? value.length > 0 : value.trim() !== '';
+    if (!hasValue || completedFieldsRef.current.has(name)) return;
+    completedFieldsRef.current.add(name);
+    onFunnelEvent('field_complete', name);
+  };
 
   const submit = async () => {
     if (sheet.phase !== 'form' || submitting) return;
+    onFunnelEvent('submit_attempt');
     const def = sheet.def;
     for (const f of def.fields) {
       const v = values[f.name];
       const empty = v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
       if (f.required && empty) {
+        onFunnelEvent('submit_error');
         setError(`「${f.label}」は必須項目です`);
         return;
       }
@@ -989,12 +1033,15 @@ function FormSheet({
       });
       const json = (await r.json()) as { success: boolean; error?: string };
       if (!r.ok || !json.success) {
+        onFunnelEvent('submit_error');
         setError(json.error || '送信に失敗しました。もう一度お試しください。');
         setSubmitting(false);
         return;
       }
+      onFunnelEvent('submit_success');
       onSubmitted(def);
     } catch {
+      onFunnelEvent('submit_error');
       setError('送信に失敗しました。通信環境をご確認ください。');
       setSubmitting(false);
     }
@@ -1096,7 +1143,10 @@ function FormSheet({
                             日付
                             <select
                               value={(values[f.name] as string) ?? ''}
-                              onChange={(e) => setValue(f.name, e.target.value)}
+                              onChange={(e) => {
+                                setValue(f.name, e.target.value);
+                                markFieldComplete(f.name, e.target.value);
+                              }}
                               className={`mt-1 ${inputCls}`}
                             >
                               <option value="">日付を選択</option>
@@ -1111,7 +1161,10 @@ function FormSheet({
                             開始時刻
                             <select
                               value={(values[timeField.name] as string) ?? ''}
-                              onChange={(e) => setValue(timeField.name, e.target.value)}
+                              onChange={(e) => {
+                                setValue(timeField.name, e.target.value);
+                                markFieldComplete(timeField.name, e.target.value);
+                              }}
                               className={`mt-1 ${inputCls}`}
                             >
                               <option value="">選択</option>
@@ -1137,12 +1190,16 @@ function FormSheet({
                       placeholder={f.placeholder}
                       value={(values[f.name] as string) ?? ''}
                       onChange={(e) => setValue(f.name, e.target.value)}
+                      onBlur={(e) => markFieldComplete(f.name, e.target.value)}
                       className={`mt-1 ${inputCls}`}
                     />
                   ) : f.type === 'select' ? (
                     <select
                       value={(values[f.name] as string) ?? ''}
-                      onChange={(e) => setValue(f.name, e.target.value)}
+                      onChange={(e) => {
+                        setValue(f.name, e.target.value);
+                        markFieldComplete(f.name, e.target.value);
+                      }}
                       className={`mt-1 ${inputCls}`}
                     >
                       <option value="">選択してください</option>
@@ -1158,7 +1215,10 @@ function FormSheet({
                             type="radio"
                             name={f.name}
                             checked={values[f.name] === o}
-                            onChange={() => setValue(f.name, o)}
+                            onChange={() => {
+                              setValue(f.name, o);
+                              markFieldComplete(f.name, o);
+                            }}
                           />
                           <span>{o}</span>
                         </label>
@@ -1173,12 +1233,13 @@ function FormSheet({
                             <input
                               type="checkbox"
                               checked={cur.includes(o)}
-                              onChange={(e) =>
-                                setValue(
-                                  f.name,
-                                  e.target.checked ? [...cur, o] : cur.filter((x) => x !== o),
-                                )
-                              }
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...cur, o]
+                                  : cur.filter((x) => x !== o);
+                                setValue(f.name, next);
+                                markFieldComplete(f.name, next);
+                              }}
                             />
                             <span>{o}</span>
                           </label>
@@ -1191,6 +1252,7 @@ function FormSheet({
                       placeholder={f.placeholder}
                       value={(values[f.name] as string) ?? ''}
                       onChange={(e) => setValue(f.name, e.target.value)}
+                      onBlur={(e) => markFieldComplete(f.name, e.target.value)}
                       className={`mt-1 ${inputCls}`}
                     />
                   )}
