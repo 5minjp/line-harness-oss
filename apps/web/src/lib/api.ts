@@ -453,9 +453,12 @@ export const api = {
       accountIds?: string[]
       dedupPriority?: string[]
       trackLinks?: boolean
-    }) =>
+    }, options?: { idempotencyKey?: string }) =>
       fetchApi<ApiResponse<ApiBroadcast>>('/api/broadcasts', {
         method: 'POST',
+        headers: options?.idempotencyKey
+          ? { 'Idempotency-Key': options.idempotencyKey }
+          : undefined,
         body: JSON.stringify(data),
       }),
     update: (
