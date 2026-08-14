@@ -1253,6 +1253,7 @@ export const api = {
         size: 'large' | 'compact';
         defaultPageId: string | null;
         isDefaultForAll: boolean;
+        selected: boolean;
         status: 'draft' | 'published';
         publishingAt: string | null;
         thumbnailR2Key: string | null;
@@ -1269,6 +1270,7 @@ export const api = {
         size: 'large' | 'compact';
         defaultPageId: string | null;
         isDefaultForAll: boolean;
+        selected: boolean;
         status: 'draft' | 'published';
         publishingAt: string | null;
         createdAt: string;
@@ -1298,6 +1300,7 @@ export const api = {
       name: string;
       chatBarText: string;
       size: 'large' | 'compact';
+      selected: boolean;
       pages: Array<{
         id?: string;
         name: string;
@@ -1321,6 +1324,7 @@ export const api = {
       name?: string;
       chatBarText?: string;
       isDefaultForAll?: boolean;
+      selected?: boolean;
       pages?: Array<{
         id?: string;
         name: string;
@@ -1365,6 +1369,7 @@ export const api = {
           richMenuId: string;
           name: string;
           chatBarText: string;
+          selected: boolean;
           size: { width: number; height: number };
           areasCount: number;
           isCurrentDefault: boolean;
