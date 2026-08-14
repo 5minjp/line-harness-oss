@@ -1,5 +1,22 @@
 # Release Notes
 
+## v0.21.2 (2026-08-14)
+
+### Added — Rich menu initial display
+
+- Rich menus can now choose whether LINE opens the menu automatically when a friend enters the chat.
+- The setting is available on both the new-menu and edit screens and is applied the next time the menu is registered with LINE.
+- Existing menus retain the previous OFF behavior; newly created menus default to ON in the Admin UI.
+
+### Fixed — Admin update uploads
+
+- Cloudflare Pages asset uploads now use the same top-level JSON array format as Wrangler, fixing opaque HTTP 500 failures when the Admin update contains uncached assets.
+- Upload batches are bounded by both file count and 40 MiB of source data, with up to five retries for HTTP 429 and 5xx responses.
+
+### Database
+
+- Additive migration `069_rich_menu_selected.sql` stores the LINE rich-menu `selected` setting.
+
 ## v0.21.1 (2026-08-14)
 
 ### Fixed — Webinar analytics and registration delivery

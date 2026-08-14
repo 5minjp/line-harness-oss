@@ -72,7 +72,8 @@
     "065_following_loyalty_mileage.sql",
     "066_referral_quality_mileage.sql",
     "067_mileage_keyword_auto_reply.sql",
-    "068_media_inquiries.sql"
+    "068_media_inquiries.sql",
+    "069_rich_menu_selected.sql"
   ],
-  "migrationCount": 73
+  "migrationCount": 74
 }
