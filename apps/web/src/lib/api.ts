@@ -1698,6 +1698,7 @@ export interface BookingRequest {
   menu_name: string;
   staff_name: string;
   friend_name: string | null;
+  requested_at: string;
 }
 
 export interface BookingAvailabilityRule {
