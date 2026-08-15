@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.21.3 (2026-08-15)
+
+### 安全なアップデート経路
+
+- Worker本体と `apps/worker/dist/client` のWorker Assetsを同じリリースbundleに同梱し、一体で更新
+- v0.14.1〜v0.21.2のDBを、037以降の累積マイグレーションで直接最新版へ収束
+- マイグレーションをSQL文単位で適用し、途中適用されたファイルも未適用文だけ継続
+- 適用済みファイルのチェックサム台帳を追加し、再実行時のDML重複を防止
+- 破壊的DDLを更新開始前に拒否
+- Worker Versionを保存し、失敗時にコード・bindings・Assetsをまとめてロールバック
+- CLIの途中失敗後は、同じupdateコマンドの再実行でWorker・Admin・LIFFを再同期
+- 旧形式の `?page=webinar&slug=...` をLIFF Pagesのウェビナー画面へ転送
+
+### 更新方法
+
+Worker Assets対応前のバージョンでは、管理画面内の更新ボタンではなく次を実行してください。
+
+```bash
+npx create-line-harness@latest update
+```
+
 ## v0.21.0 (2026-08-14)
 
 ### ライブCTAから個別相談を即時確定
