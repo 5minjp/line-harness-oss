@@ -33,6 +33,7 @@ import { verifyCallerLineUserId } from '../services/liff-auth.js';
 import { awardActivityMileage } from '../services/activity-mileage.js';
 import { safeRedirectTarget } from '../lib/safe-redirect.js';
 import { isReservedRef } from '../lib/reserved-refs.js';
+import { loginUnconfiguredPage } from '../lib/login-unconfigured.js';
 import type { Env } from '../index.js';
 import { verifyCrossAccountToken } from '../lib/cross-account-token.js';
 
@@ -398,6 +399,14 @@ liffRoutes.get('/auth/line', async (c) => {
       }
     }
   }
+  // L Harness Cloud tenants are provisioned without LINE Login / LIFF config.
+  // When neither env nor the resolved account/pool provides them, the code
+  // below crashes (`liffUrl.match()` on undefined) or sends
+  // client_id=undefined to access.line.me — fail with setup guidance instead.
+  if (!channelId || !liffUrl) {
+    return c.html(loginUnconfiguredPage(), 503);
+  }
+
   const callbackUrl = `${baseUrl}/auth/callback`;
 
   // xh: refs are X Harness one-time tokens — never forward to third-party URLs (liff.line.me / QR)
@@ -606,6 +615,12 @@ liffRoutes.get('/auth/oauth', async (c) => {
     }
   }
 
+  // Same guard as /auth/line — without a login channel the redirect would
+  // carry client_id=undefined and dead-end on a LINE error page.
+  if (!channelId) {
+    return c.html(loginUnconfiguredPage(), 503);
+  }
+
   // Build OAuth URL with full state
   const callbackUrl = `${baseUrl}/auth/callback`;
   const state = JSON.stringify({
@@ -695,6 +710,12 @@ liffRoutes.get('/auth/callback', async (c) => {
         loginChannelId = account.login_channel_id;
         loginChannelSecret = account.login_channel_secret;
       }
+    }
+
+    // Same guard as /auth/line — never attempt a token exchange with
+    // undefined credentials (unconfigured L Harness Cloud tenant).
+    if (!loginChannelId || !loginChannelSecret) {
+      return c.html(loginUnconfiguredPage(), 503);
     }
 
     // Exchange code for tokens

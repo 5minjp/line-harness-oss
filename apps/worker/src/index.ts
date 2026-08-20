@@ -88,9 +88,11 @@ import { webinarRoutes } from './routes/webinars.js';
 import { instagramEngagement } from './routes/instagram-engagement.js';
 import adminVersion from './routes/admin-version.js';
 import adminUpdate from './routes/admin-update.js';
+import { adminSso } from './routes/admin-sso.js';
 import { mediaInquiries } from './routes/media-inquiries.js';
 import { isLinkPreviewBot } from './lib/og-bot.js';
 import { buildOgHtml } from './lib/og-html.js';
+import { loginUnconfiguredPage } from './lib/login-unconfigured.js';
 import {
   resolveOgForEvent,
   resolveOgForForm,
@@ -115,6 +117,11 @@ export type Env = {
     ADMIN_ORIGIN?: string;          // Comma-separated admin web origin allowlist for credentialed CORS
     ADMIN_COOKIE_SAMESITE?: string; // Optional override: 'Strict' | 'Lax' | 'None'
     ADMIN_ALLOW_CROSS_SITE?: string; // 'true' opts into SameSite=None cross-site cookies
+    // External SSO into the admin session (GET /admin/sso). Optional: when the
+    // secret is unset the route answers like any unregistered path, so the
+    // feature is entirely absent unless an operator opts in. ≥32 chars, shared
+    // with the token issuer. See routes/admin-sso.ts and docs/ADMIN-AUTH.md.
+    ADMIN_SSO_SECRET?: string;
     X_HARNESS_URL?: string;  // Optional: X Harness API URL for account linking
     IG_HARNESS_URL?: string;  // Optional: IG Harness API URL for cross-platform linking
     IG_HARNESS_LINK_SECRET?: string;  // Shared secret for IG Harness link-line webhook
@@ -248,6 +255,10 @@ app.route('/admin', adminVersion);
 // Phase 5 Task 18 — self-update endpoints guarded by x-admin-api-key.
 // authMiddleware skips non-/api/ paths so this router owns its own auth gate.
 app.route('/admin/update', adminUpdate);
+// External SSO — establishes the admin session from a signed, single-use token.
+// Inert (404) unless ADMIN_SSO_SECRET is configured. authMiddleware skips
+// non-/api/ paths, so this route owns its own verification.
+app.route('/', adminSso);
 
 // Self-hosted QR code proxy — prevents leaking ref tokens to third-party services
 app.get('/api/qr', async (c) => {
@@ -355,6 +366,13 @@ app.get('/r/:ref', async (c) => {
         if (pool.liff_id) liffUrl = `https://liff.line.me/${pool.liff_id}`;
       }
     }
+  }
+
+  // L Harness Cloud tenants are provisioned without LIFF config. When neither
+  // env LIFF_URL nor the resolved pool/affiliate account provides one,
+  // `liffUrl.match()` below throws on undefined (500) — return setup guidance.
+  if (!liffUrl) {
+    return c.html(loginUnconfiguredPage(), 503);
   }
 
   // Build LIFF URL with params (direct link for Universal Link)
