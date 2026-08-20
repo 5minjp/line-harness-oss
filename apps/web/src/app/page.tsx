@@ -71,16 +71,19 @@ function StatCard({ title, value, loading, icon, href, accentColor = '#06C755' }
   )
 }
 
-// 友だち追加リンクの即時取得カード。/auth/line は UUID 付与・アカウント解決・
-// PC では QR ランディング表示までやる正規の流入口なので、共有リンクは常に
-// これを配る (公式の lin.ee 直リンクだと計測も UUID 紐づけも失われる)。
+// 友だち追加リンクの即時取得カード。/r/dashboard は OS 対応ランディング経由で
+// LINE アプリを直接開く流入口（モバイル: LIFF Universal Link / PC: QR）。
+// UUID 付与・アカウント解決は LIFF 側 /api/liff/link が担い、ref=dashboard が
+// friends.ref_code に流入元として記録される。/auth/line?account= を配らないのは
+// モバイルブラウザで Web 版 LINE ログインが挟まり離脱を生むため
+// (公式の lin.ee 直リンクだと計測も UUID 紐づけも失われるのは従来どおり)。
 function FriendAddLinkCard() {
   const { selectedAccount } = useAccount()
   const [copied, setCopied] = useState(false)
   const base = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '')
   const link = selectedAccount
-    ? `${base}/auth/line?account=${encodeURIComponent(selectedAccount.channelId)}`
-    : `${base}/auth/line`
+    ? `${base}/r/dashboard?account=${encodeURIComponent(selectedAccount.channelId)}`
+    : `${base}/r/dashboard`
 
   const onCopy = async () => {
     try {

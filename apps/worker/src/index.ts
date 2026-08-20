@@ -8,6 +8,7 @@ import {
   getRandomPoolAccount,
   getPoolAccounts,
   getEntryRouteByRefCode,
+  getLineAccountByChannelId,
   getLineAccountById,
   getAffiliateLinkByRefCode,
   incrementAffiliateLinkClick,
@@ -274,11 +275,28 @@ app.get('/r/:ref', async (c) => {
   const formId = c.req.query('form') || '';
 
   // Resolve LIFF URL — priority:
+  //   0. URL query ?account= (explicit single-account pin — admin-issued
+  //      per-account links must never be re-routed by a colliding ref_code)
   //   1. entry_route.pool_id (if ref maps to a referral link)
   //   2. URL query ?pool=
   //   3. 'main' fallback
   let liffUrl = c.env.LIFF_URL;
   let pool: Awaited<ReturnType<typeof getTrafficPoolBySlug>> | null = null;
+
+  // 0. ?account= pins the destination account and wins over any ref-derived
+  // pool/affiliate resolution. The ref still rides through to LIFF below, so
+  // attribution (friends.ref_code / ref_tracking via /api/liff/link) keeps
+  // working; only the account choice is fixed. Unknown channel_id or an
+  // account without liff_id falls through to the normal resolution chain.
+  const accountParam = c.req.query('account') || '';
+  let accountResolved = false;
+  if (accountParam) {
+    const account = await getLineAccountByChannelId(c.env.DB, accountParam);
+    if (account?.liff_id) {
+      liffUrl = `https://liff.line.me/${account.liff_id}`;
+      accountResolved = true;
+    }
+  }
 
   // 1. entry_route lookup. getTrafficPoolById (unlike getTrafficPoolBySlug)
   // does not filter on is_active, so we ignore disabled pools explicitly to
@@ -290,7 +308,7 @@ app.get('/r/:ref', async (c) => {
   // double-count every successful click in getEntryRouteFunnel. Landing-page
   // drop-off (clicks that never reach OAuth) is therefore not visible in the
   // funnel; that limitation is intentional pending a dedicated click table.
-  const route = await getEntryRouteByRefCode(c.env.DB, ref);
+  const route = accountResolved ? null : await getEntryRouteByRefCode(c.env.DB, ref);
   if (route?.pool_id) {
     const candidate = await getTrafficPoolById(c.env.DB, route.pool_id);
     if (candidate?.is_active) pool = candidate;
@@ -306,7 +324,7 @@ app.get('/r/:ref', async (c) => {
   // through to LIFF state below so the existing ref_tracking flow attributes
   // the eventual friend-add via /auth/callback + /api/liff/link.
   let affiliateResolved = false;
-  if (!route) {
+  if (!route && !accountResolved) {
     const affiliateLink = await getAffiliateLinkByRefCode(c.env.DB, ref);
     if (affiliateLink) {
       await incrementAffiliateLinkClick(c.env.DB, ref);
@@ -322,7 +340,7 @@ app.get('/r/:ref', async (c) => {
   // 2 / 3. fallback to URL query or 'main'. Skipped for affiliate refs, whose
   // account is already resolved above; falling through to the 'main' pool would
   // override the affiliate's chosen account.
-  if (!pool && !affiliateResolved) {
+  if (!pool && !affiliateResolved && !accountResolved) {
     const poolSlug = c.req.query('pool') || 'main';
     pool = await getTrafficPoolBySlug(c.env.DB, poolSlug);
   }
@@ -345,6 +363,8 @@ app.get('/r/:ref', async (c) => {
   if (liffIdMatch) liffParams.set('liffId', liffIdMatch[1]);
   if (ref) liffParams.set('ref', ref);
   if (formId) liffParams.set('form', formId);
+  // Parity with /auth/line's qrParams — keeps the account hint on the LIFF URL.
+  if (accountParam) liffParams.set('account', accountParam);
   const gate = c.req.query('gate');
   if (gate) liffParams.set('gate', gate);
   const xh = c.req.query('xh');
