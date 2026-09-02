@@ -707,18 +707,18 @@ CREATE TABLE IF NOT EXISTS mileage_rules (
 );
 
 CREATE TABLE IF NOT EXISTS notification_rules (
-  id              TEXT PRIMARY KEY,
-  name            TEXT NOT NULL,
-  event_type      TEXT NOT NULL,
-  conditions      TEXT NOT NULL DEFAULT '{}',
-  channels        TEXT NOT NULL DEFAULT '["webhook"]',
-  is_active       INTEGER NOT NULL DEFAULT 1,
-  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
-  updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  event_type   TEXT NOT NULL,
+  conditions   TEXT NOT NULL DEFAULT '{}',
+  channels     TEXT NOT NULL DEFAULT '["webhook"]',
+  is_active    INTEGER NOT NULL DEFAULT 1,
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
   line_account_id TEXT
 );
 
-CREATE TABLE IF NOT EXISTS "notifications" (
+CREATE TABLE IF NOT EXISTS notifications (
   id              TEXT PRIMARY KEY,
   rule_id         TEXT REFERENCES notification_rules (id) ON DELETE SET NULL,
   event_type      TEXT NOT NULL,
